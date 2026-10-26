@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/0b11stan/signal2signal/internal/signalapi"
 )
@@ -16,10 +17,14 @@ type relayer struct {
 	client *signalapi.Client
 	// groups are the linked groups, keyed by the id found in incoming messages.
 	groups map[string]signalapi.Group
-	// sent holds the timestamps of the messages we posted ourselves, so that
-	// if one ever comes back as an incoming event it is not relayed again.
-	sent map[int64]struct{}
+	// sent holds the timestamps of the messages we posted ourselves, with the
+	// time we sent them, so that if one ever comes back as an incoming event
+	// it is not relayed again. An echo would arrive within seconds, so entries
+	// older than sentTTL are dropped.
+	sent map[int64]time.Time
 }
+
+const sentTTL = time.Hour
 
 // linked reports whether m was posted in one of the linked groups.
 func (r *relayer) linked(m message) bool {
@@ -56,7 +61,7 @@ func (r *relayer) handle(ctx context.Context, m message) {
 			continue
 		}
 		if ts != 0 {
-			r.sent[ts] = struct{}{}
+			r.remember(ts)
 		}
 		log.Printf("relay: sent to %q", g.Name)
 	}
@@ -79,4 +84,16 @@ func (r *relayer) images(ctx context.Context, m message) []signalapi.File {
 		files = append(files, signalapi.File{ContentType: a.ContentType, Data: data})
 	}
 	return files
+}
+
+// remember records ts as one of our own messages and forgets the ones older
+// than sentTTL.
+func (r *relayer) remember(ts int64) {
+	now := time.Now()
+	for old, at := range r.sent {
+		if now.Sub(at) > sentTTL {
+			delete(r.sent, old)
+		}
+	}
+	r.sent[ts] = now
 }

@@ -16,10 +16,10 @@ discussions from one group to the others.
 `signal2signal` runs a dedicated Signal account (a "bridge bot") that is a
 member of every group in the community. Whenever a message is posted in one
 group, the bot re-posts it to all the other linked groups, prefixed with the
-author's name and origin group:
+origin group:
 
 ```
-[Community A] Alice: Meeting is moved to 8pm tonight!
+[Community A] Meeting is moved to 8pm tonight!
 ```
 
 ```
@@ -35,8 +35,8 @@ author's name and origin group:
 
 - **Message relay** — text messages from any linked group are forwarded to
   all the others.
-- **Attribution** — relayed messages show the original sender's display name
-  and the group they came from.
+- **Origin** — relayed messages show the group they came from. The author's
+  name and number are not relayed.
 - **Attachments** — images, files and voice notes are relayed too.
 - **Replies & quotes** — a reply to a relayed message is shown as a reply in
   the other groups as well, when possible.

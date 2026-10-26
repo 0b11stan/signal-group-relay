@@ -7,7 +7,7 @@ Guidance for Claude Code when working in this repository.
 `signal2signal` is a bridge that relays messages between several Signal groups
 so a community larger than Signal's ~1000-member group limit can behave like a
 single group. A dedicated bot account sits in every linked group and re-posts
-each message to the others with the sender's name and origin group. See
+each message to the others, prefixed with the origin group. See
 `README.md` for the full design, planned features and caveats.
 
 ## Status

@@ -61,7 +61,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	r := &relayer{client: client, groups: groups, sent: make(map[int64]struct{})}
+	r := &relayer{client: client, groups: groups, sent: make(map[int64]time.Time)}
 	log.Printf("relaying messages between %d linked groups", len(groups))
 
 	log.Printf("listening for messages to %s (Ctrl+C to stop)", *number)
