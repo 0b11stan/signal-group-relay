@@ -1,4 +1,4 @@
-# signal2signal
+# signal-group-relay
 
 A bridge that relays messages between multiple Signal groups, so a community
 larger than Signal's group size limit (~1000 members) can talk as if it were a
@@ -13,7 +13,7 @@ discussions from one group to the others.
 
 ## The idea
 
-`signal2signal` runs a dedicated Signal account (a "bridge bot") that is a
+`signal-group-relay` runs a dedicated Signal account (a "bridge bot") that is a
 member of every group in the community. Whenever a message is posted in one
 group, the bot re-posts it to all the other linked groups, prefixed with the
 origin group:
@@ -110,7 +110,7 @@ curl http://localhost:8081/v1/about
 
 The API joins your account as a *linked device*, like Signal Desktop.
 
-1. Open <http://localhost:8081/v1/qrcodelink?device_name=signal2signal> in a
+1. Open <http://localhost:8081/v1/qrcodelink?device_name=signal-group-relay> in a
    browser. It shows a QR code.
 2. On your phone: Signal → Settings → Linked devices → Link new device, and
    scan the code.
@@ -135,7 +135,7 @@ The API joins your account as a *linked device*, like Signal Desktop.
 ```sh
 export SIGNAL_NUMBER=+33600000000   # your number, international format
 
-go run ./cmd/signal2signal -groups
+go run ./cmd/signal-group-relay -groups
 ```
 
 ### 4. Relay messages
@@ -151,7 +151,7 @@ def...=
 ```
 
 ```sh
-go run ./cmd/signal2signal -linked-groups groups.txt
+go run ./cmd/signal-group-relay -linked-groups groups.txt
 ```
 
 The program refuses to start if an id isn't one of your account's groups. Then
@@ -199,7 +199,7 @@ real community, give the bridge its own Signal account:
    ```
 
 3. **Add the bot** to each group (it takes one member slot per group), then
-   `SIGNAL_NUMBER=$BOT go run ./cmd/signal2signal -groups` and write
+   `SIGNAL_NUMBER=$BOT go run ./cmd/signal-group-relay -groups` and write
    `groups.txt` from its output.
 4. **Run the bridge** in the container, next to the API:
 

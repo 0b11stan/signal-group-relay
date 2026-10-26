@@ -1,4 +1,4 @@
-module github.com/0b11stan/signal2signal
+module github.com/0b11stan/signal-group-relay
 
 go 1.26.10
 

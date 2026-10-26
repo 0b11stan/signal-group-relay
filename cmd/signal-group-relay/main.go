@@ -1,4 +1,4 @@
-// Command signal2signal connects to signal-cli-rest-api and prints the
+// Command signal-group-relay connects to signal-cli-rest-api and prints the
 // messages received by the account. It is the first step towards the bridge.
 package main
 
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0b11stan/signal2signal/internal/signalapi"
+	"github.com/0b11stan/signal-group-relay/internal/signalapi"
 )
 
 func main() {

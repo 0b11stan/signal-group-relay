@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-`signal2signal` is a bridge that relays messages between several Signal groups
+`signal-group-relay` is a bridge that relays messages between several Signal groups
 so a community larger than Signal's ~1000-member group limit can behave like a
 single group. A dedicated bot account sits in every linked group and re-posts
 each message to the others, prefixed with the origin group. See
@@ -15,12 +15,12 @@ each message to the others, prefixed with the origin group. See
 Early development, built step by step with the user: don't jump ahead to
 later features without asking.
 
-- Language: Go (module `github.com/0b11stan/signal2signal`).
+- Language: Go (module `github.com/0b11stan/signal-group-relay`).
 - Signal backend: signal-cli-rest-api in `json-rpc` mode (`docker-compose.yml`),
   exposed on `http://localhost:8081` because port 8080 is taken on the dev
   machine. Incoming messages are streamed over the
   `/v1/receive/{number}` websocket.
-- Layout: `cmd/signal2signal` (entry point), `internal/signalapi` (API client
+- Layout: `cmd/signal-group-relay` (entry point), `internal/signalapi` (API client
   and message types).
 - Ask before adding dependencies.
 
@@ -58,8 +58,8 @@ through `nix-shell --run '...'`, which uses `shell.nix`.
 
 ```sh
 docker compose up -d                       # start the Signal API
-nix-shell --run 'go build -o bin/signal2signal ./cmd/signal2signal'
+nix-shell --run 'go build -o bin/signal-group-relay ./cmd/signal-group-relay'
 nix-shell --run 'go vet ./...'
-SIGNAL_NUMBER=+33... ./bin/signal2signal -groups   # list groups
-SIGNAL_NUMBER=+33... ./bin/signal2signal           # print incoming messages
+SIGNAL_NUMBER=+33... ./bin/signal-group-relay -groups   # list groups
+SIGNAL_NUMBER=+33... ./bin/signal-group-relay -linked-groups groups.txt   # relay
 ```

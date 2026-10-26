@@ -7,4 +7,4 @@ config.yaml
 
 # Build output
 /bin/
-/signal2signal
+/signal-group-relay

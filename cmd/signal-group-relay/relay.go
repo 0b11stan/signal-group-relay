@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0b11stan/signal2signal/internal/signalapi"
+	"github.com/0b11stan/signal-group-relay/internal/signalapi"
 )
 
 // relayer copies the messages posted in one linked group to all the other
