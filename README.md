@@ -166,6 +166,21 @@ go run ./cmd/signal2signal -linked-groups groups.txt
 
 The program refuses to start if an id isn't one of your account's groups.
 
+### 4. Relay messages
+
+```sh
+# See what would be sent, without sending anything
+go run ./cmd/signal2signal -linked-groups groups.txt -relay -dry-run
+
+# Really relay
+go run ./cmd/signal2signal -linked-groups groups.txt -relay
+```
+
+With `-relay`, every text message **you** write in a linked group (from your
+phone) is posted to all the other linked groups. Since the bridge is a linked
+device of your account, the copies appear as sent by you. Not relayed yet:
+messages written by other members, attachments, replies and reactions.
+
 Use `-api` if the API is not on `http://localhost:8081`.
 
 ## Caveats

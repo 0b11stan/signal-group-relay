@@ -3,11 +3,14 @@
 package signalapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -99,4 +102,64 @@ func (c *Client) Receive(ctx context.Context, handle func(Incoming)) error {
 		}
 		handle(in)
 	}
+}
+
+// Send posts a text message to a group and returns the message timestamp.
+// groupID is the API's Group.ID (not the InternalID).
+func (c *Client) Send(ctx context.Context, groupID, text string) (int64, error) {
+	body, err := json.Marshal(map[string]any{
+		"message":    text,
+		"number":     c.number,
+		"recipients": []string{groupID},
+	})
+	if err != nil {
+		return 0, err
+	}
+	u := c.baseURL.JoinPath("v2", "send")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("send: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return 0, fmt.Errorf("send: unexpected status %s: %s", resp.Status, strings.TrimSpace(string(msg)))
+	}
+	return parseSendTimestamp(resp.Body)
+}
+
+// parseSendTimestamp extracts the message timestamp from a send response.
+// Depending on the API version the response is either an object or an array
+// of objects carrying a "timestamp" (a number or a numeric string). It returns
+// 0 if no timestamp is present: the message was still sent.
+func parseSendTimestamp(r io.Reader) (int64, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return 0, fmt.Errorf("read send response: %w", err)
+	}
+	var entries []struct {
+		Timestamp json.Number `json:"timestamp"`
+	}
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '[' {
+		err = json.Unmarshal(trimmed, &entries)
+	} else {
+		entries = make([]struct {
+			Timestamp json.Number `json:"timestamp"`
+		}, 1)
+		err = json.Unmarshal(trimmed, &entries[0])
+	}
+	if err != nil {
+		return 0, fmt.Errorf("decode send response %q: %w", data, err)
+	}
+	for _, e := range entries {
+		if ts, err := strconv.ParseInt(e.Timestamp.String(), 10, 64); err == nil {
+			return ts, nil
+		}
+	}
+	return 0, nil
 }

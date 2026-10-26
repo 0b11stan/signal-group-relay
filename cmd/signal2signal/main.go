@@ -22,8 +22,16 @@ func main() {
 	number := flag.String("number", os.Getenv("SIGNAL_NUMBER"), "account phone number, e.g. +33600000000 (or $SIGNAL_NUMBER)")
 	listGroups := flag.Bool("groups", false, "list the account's groups and exit")
 	linkedFile := flag.String("linked-groups", "", "file with one group id per line (as printed by -groups); only messages from these groups are shown")
+	relayFlag := flag.Bool("relay", false, "relay messages you write in one linked group to all the other linked groups (needs -linked-groups)")
+	dryRun := flag.Bool("dry-run", false, "with -relay, print what would be sent without sending anything")
 	flag.Parse()
 
+	if *relayFlag && *linkedFile == "" {
+		log.Fatal("-relay needs -linked-groups")
+	}
+	if *dryRun && !*relayFlag {
+		log.Fatal("-dry-run needs -relay")
+	}
 	if *number == "" {
 		log.Fatal("missing account number: pass -number or set SIGNAL_NUMBER")
 	}
@@ -47,20 +55,48 @@ func main() {
 		return
 	}
 
-	var linked map[string]struct{}
+	var (
+		linked map[string]struct{}
+		r      *relayer
+	)
 	if *linkedFile != "" {
 		linked, err = loadGroupIDs(*linkedFile)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := checkGroupsExist(ctx, client, linked); err != nil {
+		groups, err := resolveGroups(ctx, client, linked)
+		if err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("linked groups: %d", len(linked))
+		if *relayFlag {
+			if len(groups) < 2 {
+				log.Fatal("-relay needs at least two linked groups")
+			}
+			r = &relayer{client: client, groups: groups, dryRun: *dryRun, sent: make(map[int64]struct{})}
+			log.Printf("relaying your messages between the linked groups (dry-run: %t)", *dryRun)
+		}
 	}
 
 	log.Printf("listening for messages to %s (Ctrl+C to stop)", *number)
-	err = client.Receive(ctx, func(in signalapi.Incoming) { printMessage(in, linked) })
+	err = client.Receive(ctx, func(in signalapi.Incoming) {
+		m, ok := parseMessage(in)
+		if !ok {
+			return
+		}
+		if linked != nil {
+			if m.group == nil {
+				return
+			}
+			if _, ok := linked[m.group.GroupID]; !ok {
+				return
+			}
+		}
+		m.print()
+		if r != nil {
+			r.handle(ctx, m)
+		}
+	})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
 	}
@@ -93,72 +129,76 @@ func loadGroupIDs(path string) (map[string]struct{}, error) {
 	return ids, nil
 }
 
-// checkGroupsExist fails if one of ids is not a group the account belongs to,
-// which would otherwise silently match nothing.
-func checkGroupsExist(ctx context.Context, client *signalapi.Client, ids map[string]struct{}) error {
+// resolveGroups returns the account's groups matching ids, keyed by id. It
+// fails if one of ids is not a group the account belongs to, which would
+// otherwise silently match nothing.
+func resolveGroups(ctx context.Context, client *signalapi.Client, ids map[string]struct{}) (map[string]signalapi.Group, error) {
 	groups, err := client.Groups(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	known := make(map[string]struct{}, len(groups))
+	known := make(map[string]signalapi.Group, len(groups))
 	for _, g := range groups {
-		known[g.InternalID] = struct{}{}
+		known[g.InternalID] = g
 	}
+	found := make(map[string]signalapi.Group, len(ids))
 	for id := range ids {
-		if _, ok := known[id]; !ok {
-			return fmt.Errorf("group id %q is not one of the account's groups (see -groups)", id)
+		g, ok := known[id]
+		if !ok {
+			return nil, fmt.Errorf("group id %q is not one of the account's groups (see -groups)", id)
 		}
+		found[id] = g
 	}
-	return nil
+	return found, nil
 }
 
-// printMessage prints text messages, whether sent by others or by our own
-// other devices, and ignores receipts and typing indicators. If linked is not
-// nil, only messages posted in one of those groups are printed.
-func printMessage(in signalapi.Incoming, linked map[string]struct{}) {
+// message is a text message received by the account, either from someone
+// else or typed on one of our own other devices.
+type message struct {
+	sender      string
+	text        string
+	timestamp   int64
+	group       *signalapi.GroupInfo // nil for direct messages
+	attachments int
+	fromMe      bool
+}
+
+// parseMessage extracts a message from an incoming event. It returns false
+// for receipts, typing indicators, reactions, deletions and the like.
+func parseMessage(in signalapi.Incoming) (message, bool) {
 	env := in.Envelope
-	sender := env.SourceName
-	if sender == "" {
-		sender = env.Source
+	m := message{sender: env.SourceName}
+	if m.sender == "" {
+		m.sender = env.Source
 	}
 
-	var (
-		text  string
-		ts    int64
-		group *signalapi.GroupInfo
-		n     int
-	)
 	switch {
 	case env.DataMessage != nil:
-		m := env.DataMessage
-		text, ts, group, n = m.Message, m.Timestamp, m.GroupInfo, len(m.Attachments)
+		d := env.DataMessage
+		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, len(d.Attachments)
 	case env.SyncMessage != nil && env.SyncMessage.SentMessage != nil:
-		m := env.SyncMessage.SentMessage
-		text, ts, group, n = m.Message, m.Timestamp, m.GroupInfo, len(m.Attachments)
-		sender += " (me)"
+		d := env.SyncMessage.SentMessage
+		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, len(d.Attachments)
+		m.fromMe = true
+		m.sender += " (me)"
 	default:
-		return
+		return message{}, false
 	}
-	if text == "" && n == 0 {
-		return // reactions, deletions, profile updates...
+	if m.text == "" && m.attachments == 0 {
+		return message{}, false
 	}
-	if linked != nil {
-		if group == nil {
-			return
-		}
-		if _, ok := linked[group.GroupID]; !ok {
-			return
-		}
-	}
+	return m, true
+}
 
+func (m message) print() {
 	where := "direct"
-	if group != nil {
-		where = fmt.Sprintf("group %q id=%s", group.GroupName, group.GroupID)
+	if m.group != nil {
+		where = fmt.Sprintf("group %q id=%s", m.group.GroupName, m.group.GroupID)
 	}
-	when := time.UnixMilli(ts).Format(time.DateTime)
-	fmt.Printf("[%s] %s | %s: %s", when, where, sender, text)
-	if n > 0 {
-		fmt.Printf(" [+%d attachment(s)]", n)
+	when := time.UnixMilli(m.timestamp).Format(time.DateTime)
+	fmt.Printf("[%s] %s | %s: %s", when, where, m.sender, m.text)
+	if m.attachments > 0 {
+		fmt.Printf(" [+%d attachment(s)]", m.attachments)
 	}
 	fmt.Println()
 }
