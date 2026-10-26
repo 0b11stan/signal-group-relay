@@ -21,12 +21,12 @@ func main() {
 	apiURL := flag.String("api", "http://localhost:8081", "signal-cli-rest-api base URL")
 	number := flag.String("number", os.Getenv("SIGNAL_NUMBER"), "account phone number, e.g. +33600000000 (or $SIGNAL_NUMBER)")
 	listGroups := flag.Bool("groups", false, "list the account's groups and exit")
-	linkedFile := flag.String("linked-groups", "", "file with one group id per line (as printed by -groups); only messages from these groups are shown")
-	relayFlag := flag.Bool("relay", false, "relay messages you write in one linked group to all the other linked groups (needs -linked-groups)")
+	linkedFile := flag.String("linked-groups", "", "file with one group id per line (as printed by -groups); messages posted in one of these groups are relayed to all the others")
 	flag.Parse()
 
-	if *relayFlag && *linkedFile == "" {
-		log.Fatal("-relay needs -linked-groups")
+	if *linkedFile == "" && !*listGroups {
+		flag.Usage()
+		os.Exit(2)
 	}
 	if *number == "" {
 		log.Fatal("missing account number: pass -number or set SIGNAL_NUMBER")
@@ -51,28 +51,19 @@ func main() {
 		return
 	}
 
-	var (
-		linked map[string]struct{}
-		r      *relayer
-	)
-	if *linkedFile != "" {
-		linked, err = loadGroupIDs(*linkedFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		groups, err := resolveGroups(ctx, client, linked)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("linked groups: %d", len(linked))
-		if *relayFlag {
-			if len(groups) < 2 {
-				log.Fatal("-relay needs at least two linked groups")
-			}
-			r = &relayer{client: client, groups: groups, sent: make(map[int64]struct{})}
-			log.Printf("relaying messages between the linked groups")
-		}
+	ids, err := loadGroupIDs(*linkedFile)
+	if err != nil {
+		log.Fatal(err)
 	}
+	if len(ids) < 2 {
+		log.Fatal("-linked-groups needs at least two group ids")
+	}
+	groups, err := resolveGroups(ctx, client, ids)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := &relayer{client: client, groups: groups, sent: make(map[int64]struct{})}
+	log.Printf("relaying messages between %d linked groups", len(groups))
 
 	log.Printf("listening for messages to %s (Ctrl+C to stop)", *number)
 	err = client.Receive(ctx, func(in signalapi.Incoming) {
@@ -80,18 +71,11 @@ func main() {
 		if !ok {
 			return
 		}
-		if linked != nil {
-			if m.group == nil {
-				return
-			}
-			if _, ok := linked[m.group.GroupID]; !ok {
-				return
-			}
+		if !r.linked(m) {
+			return
 		}
 		m.print()
-		if r != nil {
-			r.handle(ctx, m)
-		}
+		r.handle(ctx, m)
 	})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)

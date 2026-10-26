@@ -130,29 +130,19 @@ The API joins your account as a *linked device*, like Signal Desktop.
 > That's fine for experimenting. For production, register a dedicated number
 > for the bot instead.
 
-### 3. Read messages
+### 3. List your groups
 
 ```sh
 export SIGNAL_NUMBER=+33600000000   # your number, international format
 
-# List your groups and their ids
 go run ./cmd/signal2signal -groups
-
-# Print incoming messages (Ctrl+C to stop)
-go run ./cmd/signal2signal
 ```
 
-Send a message in one of your groups and it shows up:
+### 4. Relay messages
 
-```
-[2026-10-26 12:30:00] group "Community A" id=abc...= | Alice: hello!
-```
-
-Messages you type on your phone also show up, tagged `(me)`.
-
-To only watch the groups you want to link, put their ids (the `id=` value
-printed by `-groups`) in a file, one per line. Blank lines and lines starting
-with `#` are ignored:
+Put the ids of the groups to link (the `id=` value printed by `-groups`) in a
+file, one per line, at least two. Blank lines and lines starting with `#` are
+ignored:
 
 ```
 # groups.txt
@@ -164,17 +154,19 @@ def...=
 go run ./cmd/signal2signal -linked-groups groups.txt
 ```
 
-The program refuses to start if an id isn't one of your account's groups.
+The program refuses to start if an id isn't one of your account's groups. Then
+every text message posted in a linked group is posted to all the other linked
+groups, and also printed in the terminal (Ctrl+C to stop):
 
-### 4. Relay messages
-
-```sh
-go run ./cmd/signal2signal -linked-groups groups.txt -relay
+```
+[2026-10-26 12:30:00] group "Community A" id=abc...= | Alice: hello!
 ```
 
-With `-relay`, every text message posted in a linked group is posted to all the
-other linked groups. Since the bridge is a linked device of your account, the
-copies appear as sent by you:
+Messages you type on your phone are tagged `(me)`. The program does nothing
+without `-linked-groups` (or `-groups`): it prints its usage.
+
+Since the bridge is a linked device of your account, the relayed copies appear
+as sent by you:
 
 - messages written by other members are prefixed with the origin group, e.g.
   `[Community A] hello`. The author's name and phone number are never relayed;

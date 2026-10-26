@@ -20,10 +20,17 @@ type relayer struct {
 	sent map[int64]struct{}
 }
 
-func (r *relayer) handle(ctx context.Context, m message) {
+// linked reports whether m was posted in one of the linked groups.
+func (r *relayer) linked(m message) bool {
 	if m.group == nil {
-		return
+		return false
 	}
+	_, ok := r.groups[m.group.GroupID]
+	return ok
+}
+
+// handle relays m to the other linked groups. m must be linked.
+func (r *relayer) handle(ctx context.Context, m message) {
 	if _, ours := r.sent[m.timestamp]; ours {
 		return
 	}
