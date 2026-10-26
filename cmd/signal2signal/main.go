@@ -155,7 +155,11 @@ func resolveGroups(ctx context.Context, client *signalapi.Client, ids map[string
 // message is a text message received by the account, either from someone
 // else or typed on one of our own other devices.
 type message struct {
-	sender      string
+	// sender is a label for logs: the display name, or the phone number.
+	sender string
+	// name is the sender's display name only, empty if unknown. Unlike
+	// sender it never contains a phone number, so it is safe to relay.
+	name        string
 	text        string
 	timestamp   int64
 	group       *signalapi.GroupInfo // nil for direct messages
@@ -167,7 +171,7 @@ type message struct {
 // for receipts, typing indicators, reactions, deletions and the like.
 func parseMessage(in signalapi.Incoming) (message, bool) {
 	env := in.Envelope
-	m := message{sender: env.SourceName}
+	m := message{sender: env.SourceName, name: env.SourceName}
 	if m.sender == "" {
 		m.sender = env.Source
 	}

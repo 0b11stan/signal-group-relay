@@ -176,10 +176,16 @@ go run ./cmd/signal2signal -linked-groups groups.txt -relay -dry-run
 go run ./cmd/signal2signal -linked-groups groups.txt -relay
 ```
 
-With `-relay`, every text message **you** write in a linked group (from your
-phone) is posted to all the other linked groups. Since the bridge is a linked
-device of your account, the copies appear as sent by you. Not relayed yet:
-messages written by other members, attachments, replies and reactions.
+With `-relay`, every text message posted in a linked group is posted to all the
+other linked groups. Since the bridge is a linked device of your account, the
+copies appear as sent by you:
+
+- messages written by other members are prefixed with the origin group and the
+  author's display name, e.g. `[Community A] Alice: hello`. Phone numbers are
+  never relayed;
+- messages you write yourself are sent as they are.
+
+Not relayed yet: attachments, replies, mentions, reactions and edits.
 
 Use `-api` if the API is not on `http://localhost:8081`.
 
