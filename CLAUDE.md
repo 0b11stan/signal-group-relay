@@ -12,10 +12,17 @@ each message to the others with the sender's name and origin group. See
 
 ## Status
 
-Early design phase: no code, language or Signal backend has been chosen yet.
-Candidate backends are signal-cli (JSON-RPC daemon mode) and
-signal-cli-rest-api. Don't pick a language, framework or backend without
-asking first.
+Early development, built step by step with the user: don't jump ahead to
+later features without asking.
+
+- Language: Go (module `github.com/0b11stan/signal2signal`).
+- Signal backend: signal-cli-rest-api in `json-rpc` mode (`docker-compose.yml`),
+  exposed on `http://localhost:8081` because port 8080 is taken on the dev
+  machine. Incoming messages are streamed over the
+  `/v1/receive/{number}` websocket.
+- Layout: `cmd/signal2signal` (entry point), `internal/signalapi` (API client
+  and message types).
+- Ask before adding dependencies.
 
 ## Git rules
 
@@ -41,4 +48,18 @@ asking first.
 ## Conventions
 
 - Keep the README up to date when features or configuration change.
-- Build, test and lint commands will be added here once the stack is chosen.
+- Run `gofmt`, `go vet ./...` and `go build ./...` before considering a change
+  done.
+
+## Commands
+
+Go is not installed globally on the dev machine (NixOS): run Go commands
+through `nix-shell --run '...'`, which uses `shell.nix`.
+
+```sh
+docker compose up -d                       # start the Signal API
+nix-shell --run 'go build -o bin/signal2signal ./cmd/signal2signal'
+nix-shell --run 'go vet ./...'
+SIGNAL_NUMBER=+33... ./bin/signal2signal -groups   # list groups
+SIGNAL_NUMBER=+33... ./bin/signal2signal           # print incoming messages
+```

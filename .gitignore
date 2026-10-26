@@ -1,1 +1,9 @@
 examples/
+
+# Local configuration and secrets
+.env
+config.yaml
+
+# Build output
+/bin/
+/signal2signal

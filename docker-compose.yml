@@ -1,0 +1,17 @@
+services:
+  signal-api:
+    image: bbernhard/signal-cli-rest-api:0.101
+    restart: unless-stopped
+    environment:
+      # json-rpc keeps signal-cli running as a daemon and streams incoming
+      # messages over a websocket, which is what the bridge consumes.
+      - MODE=json-rpc
+    ports:
+      # Only reachable from this machine: the API has no authentication.
+      - "127.0.0.1:8081:8080"
+    volumes:
+      # Signal account keys and data.
+      - signal-cli-data:/home/.local/share/signal-cli
+
+volumes:
+  signal-cli-data:

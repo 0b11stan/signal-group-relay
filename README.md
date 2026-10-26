@@ -78,6 +78,80 @@ bridges:
         label: "Community C"
 ```
 
+## Getting started
+
+At this stage the program only connects to Signal and prints the messages it
+receives.
+
+### Requirements
+
+- Docker with Compose (or Podman with `podman compose`)
+- Go 1.26+ (on Nix/NixOS, `nix-shell` gives you Go from `shell.nix`)
+- The Signal app on your phone
+
+### 1. Start the Signal API
+
+```sh
+docker compose up -d
+```
+
+This runs [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api)
+in `json-rpc` mode on `http://localhost:8081` (bound to localhost only: the
+API has no authentication). Account data is kept in the `signal-cli-data`
+Docker volume.
+
+Check it is up:
+
+```sh
+curl http://localhost:8081/v1/about
+```
+
+### 2. Link the API to your Signal account
+
+The API joins your account as a *linked device*, like Signal Desktop.
+
+1. Open <http://localhost:8081/v1/qrcodelink?device_name=signal2signal> in a
+   browser. It shows a QR code.
+2. On your phone: Signal → Settings → Linked devices → Link new device, and
+   scan the code.
+3. Check the account is known to the API:
+
+   ```sh
+   curl http://localhost:8081/v1/accounts
+   ```
+
+4. Restart the API so the daemon picks up the new account:
+
+   ```sh
+   docker compose restart
+   ```
+
+> **Note:** linked this way, the bridge can read *all* your conversations.
+> That's fine for experimenting. For production, register a dedicated number
+> for the bot instead.
+
+### 3. Read messages
+
+```sh
+export SIGNAL_NUMBER=+33600000000   # your number, international format
+
+# List your groups and their ids
+go run ./cmd/signal2signal -groups
+
+# Print incoming messages (Ctrl+C to stop)
+go run ./cmd/signal2signal
+```
+
+Send a message in one of your groups and it shows up:
+
+```
+[2026-10-26 12:30:00] group "Community A" id=abc...= | Alice: hello!
+```
+
+Messages you type on your phone also show up, tagged `(me)`.
+
+Use `-api` if the API is not on `http://localhost:8081`.
+
 ## Caveats
 
 - The bridge account must be a member (ideally admin) of every group.
@@ -91,7 +165,8 @@ bridges:
 
 ## Status
 
-🚧 Early design phase — nothing is implemented yet.
+🚧 Early development: the bridge can connect to Signal and print incoming
+messages, but doesn't relay them yet.
 
 ## License
 
