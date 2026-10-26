@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/0b11stan/signal2signal/internal/signalapi"
 )
@@ -34,24 +35,22 @@ func (r *relayer) handle(ctx context.Context, m message) {
 	if _, ours := r.sent[m.timestamp]; ours {
 		return
 	}
-	if m.text == "" {
-		log.Printf("relay: skipping message without text (attachments are not supported yet)")
+	files := r.images(ctx, m)
+	if m.text == "" && len(files) == 0 {
+		log.Printf("relay: skipping message without text or image")
 		return
-	}
-	if m.attachments > 0 {
-		log.Printf("relay: %d attachment(s) not relayed (not supported yet)", m.attachments)
 	}
 
 	text := m.text
 	if !m.fromMe {
-		text = fmt.Sprintf("[%s] %s", r.groups[m.group.GroupID].Name, m.text)
+		text = strings.TrimSpace(fmt.Sprintf("[%s] %s", r.groups[m.group.GroupID].Name, m.text))
 	}
 
 	for id, g := range r.groups {
 		if id == m.group.GroupID {
 			continue
 		}
-		ts, err := r.client.Send(ctx, g.ID, text)
+		ts, err := r.client.Send(ctx, g.ID, text, files...)
 		if err != nil {
 			log.Printf("relay: send to %q failed: %v", g.Name, err)
 			continue
@@ -61,4 +60,23 @@ func (r *relayer) handle(ctx context.Context, m message) {
 		}
 		log.Printf("relay: sent to %q", g.Name)
 	}
+}
+
+// images downloads the image attachments of m. Other kinds of attachment are
+// not relayed yet. Images that fail to download are logged and left out.
+func (r *relayer) images(ctx context.Context, m message) []signalapi.File {
+	var files []signalapi.File
+	for _, a := range m.attachments {
+		if !strings.HasPrefix(a.ContentType, "image/") {
+			log.Printf("relay: %s attachment not relayed (only images are supported)", a.ContentType)
+			continue
+		}
+		data, err := r.client.Attachment(ctx, a.ID)
+		if err != nil {
+			log.Printf("relay: %v", err)
+			continue
+		}
+		files = append(files, signalapi.File{ContentType: a.ContentType, Data: data})
+	}
+	return files
 }

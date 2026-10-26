@@ -5,6 +5,7 @@ package signalapi
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -104,14 +105,46 @@ func (c *Client) Receive(ctx context.Context, handle func(Incoming)) error {
 	}
 }
 
-// Send posts a text message to a group and returns the message timestamp.
-// groupID is the API's Group.ID (not the InternalID).
-func (c *Client) Send(ctx context.Context, groupID, text string) (int64, error) {
-	body, err := json.Marshal(map[string]any{
+// File is an attachment to send.
+type File struct {
+	ContentType string
+	Data        []byte
+}
+
+// Attachment downloads a received attachment by its id.
+func (c *Client) Attachment(ctx context.Context, id string) ([]byte, error) {
+	u := c.baseURL.JoinPath("v1", "attachments", id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download attachment: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download attachment: unexpected status %s", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// Send posts a message with optional attachments to a group and returns the
+// message timestamp. groupID is the API's Group.ID (not the InternalID).
+func (c *Client) Send(ctx context.Context, groupID, text string, files ...File) (int64, error) {
+	payload := map[string]any{
 		"message":    text,
 		"number":     c.number,
 		"recipients": []string{groupID},
-	})
+	}
+	if len(files) > 0 {
+		attachments := make([]string, len(files))
+		for i, f := range files {
+			attachments[i] = "data:" + f.ContentType + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
+		}
+		payload["base64_attachments"] = attachments
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return 0, err
 	}

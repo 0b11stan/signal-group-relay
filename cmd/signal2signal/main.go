@@ -139,7 +139,7 @@ type message struct {
 	text        string
 	timestamp   int64
 	group       *signalapi.GroupInfo // nil for direct messages
-	attachments int
+	attachments []signalapi.Attachment
 	fromMe      bool
 }
 
@@ -155,16 +155,16 @@ func parseMessage(in signalapi.Incoming) (message, bool) {
 	switch {
 	case env.DataMessage != nil:
 		d := env.DataMessage
-		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, len(d.Attachments)
+		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, d.Attachments
 	case env.SyncMessage != nil && env.SyncMessage.SentMessage != nil:
 		d := env.SyncMessage.SentMessage
-		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, len(d.Attachments)
+		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, d.Attachments
 		m.fromMe = true
 		m.sender += " (me)"
 	default:
 		return message{}, false
 	}
-	if m.text == "" && m.attachments == 0 {
+	if m.text == "" && len(m.attachments) == 0 {
 		return message{}, false
 	}
 	return m, true
@@ -177,8 +177,8 @@ func (m message) print() {
 	}
 	when := time.UnixMilli(m.timestamp).Format(time.DateTime)
 	fmt.Printf("[%s] %s | %s: %s", when, where, m.sender, m.text)
-	if m.attachments > 0 {
-		fmt.Printf(" [+%d attachment(s)]", m.attachments)
+	if len(m.attachments) > 0 {
+		fmt.Printf(" [+%d attachment(s)]", len(m.attachments))
 	}
 	fmt.Println()
 }
