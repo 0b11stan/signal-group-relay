@@ -150,6 +150,22 @@ Send a message in one of your groups and it shows up:
 
 Messages you type on your phone also show up, tagged `(me)`.
 
+To only watch the groups you want to link, put their ids (the `id=` value
+printed by `-groups`) in a file, one per line. Blank lines and lines starting
+with `#` are ignored:
+
+```
+# groups.txt
+abc...=
+def...=
+```
+
+```sh
+go run ./cmd/signal2signal -linked-groups groups.txt
+```
+
+The program refuses to start if an id isn't one of your account's groups.
+
 Use `-api` if the API is not on `http://localhost:8081`.
 
 ## Caveats

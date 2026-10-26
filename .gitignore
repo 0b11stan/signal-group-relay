@@ -1,4 +1,5 @@
 examples/
+groups.txt
 
 # Local configuration and secrets
 .env
