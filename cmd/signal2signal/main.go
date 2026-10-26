@@ -23,14 +23,10 @@ func main() {
 	listGroups := flag.Bool("groups", false, "list the account's groups and exit")
 	linkedFile := flag.String("linked-groups", "", "file with one group id per line (as printed by -groups); only messages from these groups are shown")
 	relayFlag := flag.Bool("relay", false, "relay messages you write in one linked group to all the other linked groups (needs -linked-groups)")
-	dryRun := flag.Bool("dry-run", false, "with -relay, print what would be sent without sending anything")
 	flag.Parse()
 
 	if *relayFlag && *linkedFile == "" {
 		log.Fatal("-relay needs -linked-groups")
-	}
-	if *dryRun && !*relayFlag {
-		log.Fatal("-dry-run needs -relay")
 	}
 	if *number == "" {
 		log.Fatal("missing account number: pass -number or set SIGNAL_NUMBER")
@@ -73,8 +69,8 @@ func main() {
 			if len(groups) < 2 {
 				log.Fatal("-relay needs at least two linked groups")
 			}
-			r = &relayer{client: client, groups: groups, dryRun: *dryRun, sent: make(map[int64]struct{})}
-			log.Printf("relaying your messages between the linked groups (dry-run: %t)", *dryRun)
+			r = &relayer{client: client, groups: groups, sent: make(map[int64]struct{})}
+			log.Printf("relaying messages between the linked groups")
 		}
 	}
 
@@ -155,11 +151,7 @@ func resolveGroups(ctx context.Context, client *signalapi.Client, ids map[string
 // message is a text message received by the account, either from someone
 // else or typed on one of our own other devices.
 type message struct {
-	// sender is a label for logs: the display name, or the phone number.
-	sender string
-	// name is the sender's display name only, empty if unknown. Unlike
-	// sender it never contains a phone number, so it is safe to relay.
-	name        string
+	sender      string
 	text        string
 	timestamp   int64
 	group       *signalapi.GroupInfo // nil for direct messages
@@ -171,7 +163,7 @@ type message struct {
 // for receipts, typing indicators, reactions, deletions and the like.
 func parseMessage(in signalapi.Incoming) (message, bool) {
 	env := in.Envelope
-	m := message{sender: env.SourceName, name: env.SourceName}
+	m := message{sender: env.SourceName}
 	if m.sender == "" {
 		m.sender = env.Source
 	}

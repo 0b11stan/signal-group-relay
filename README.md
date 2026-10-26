@@ -169,10 +169,6 @@ The program refuses to start if an id isn't one of your account's groups.
 ### 4. Relay messages
 
 ```sh
-# See what would be sent, without sending anything
-go run ./cmd/signal2signal -linked-groups groups.txt -relay -dry-run
-
-# Really relay
 go run ./cmd/signal2signal -linked-groups groups.txt -relay
 ```
 
@@ -180,9 +176,8 @@ With `-relay`, every text message posted in a linked group is posted to all the
 other linked groups. Since the bridge is a linked device of your account, the
 copies appear as sent by you:
 
-- messages written by other members are prefixed with the origin group and the
-  author's display name, e.g. `[Community A] Alice: hello`. Phone numbers are
-  never relayed;
+- messages written by other members are prefixed with the origin group, e.g.
+  `[Community A] hello`. The author's name and phone number are never relayed;
 - messages you write yourself are sent as they are.
 
 Not relayed yet: attachments, replies, mentions, reactions and edits.
