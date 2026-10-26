@@ -8,10 +8,25 @@ services:
       - MODE=json-rpc
     ports:
       # Only reachable from this machine: the API has no authentication.
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       # Signal account keys and data.
       - signal-cli-data:/home/.local/share/signal-cli
+
+  # The bridge itself. Not started by a plain `docker compose up`: it needs
+  # SIGNAL_NUMBER and a groups.txt, then run
+  #   SIGNAL_NUMBER=+33... docker compose --profile bridge up -d --build
+  bridge:
+    profiles: ["bridge"]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - signal-api
+    environment:
+      - SIGNAL_NUMBER=${SIGNAL_NUMBER:-}
+    command: ["-api", "http://signal-api:8080", "-linked-groups", "/groups.txt"]
+    volumes:
+      - ./groups.txt:/groups.txt:ro
 
 volumes:
   signal-cli-data:

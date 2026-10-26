@@ -174,7 +174,44 @@ as sent by you:
 
 Images are relayed with their caption. Not relayed yet: other attachments (files, voice notes, videos), replies, mentions, reactions and edits.
 
-Use `-api` if the API is not on `http://localhost:8081`.
+Use `-api` if the API is not on `http://localhost:8080`.
+
+## Running on a dedicated account
+
+Linked to your personal account, every copy appears as sent by you. For the
+real community, give the bridge its own Signal account:
+
+1. **Get a number** that can receive one SMS or voice call. Don't use your
+   personal one: registering a number here removes it from the Signal app.
+2. **Register it** against the running API (solve the captcha at
+   <https://signalcaptchas.org/registration/generate.html> and copy the
+   `signalcaptchas://...` token):
+
+   ```sh
+   BOT=+33...
+   curl -X POST localhost:8080/v1/register/$BOT -H 'Content-Type: application/json' \
+        -d '{"captcha": "signalcaptchas://..."}'          # add "use_voice": true for a call
+   curl -X POST localhost:8080/v1/register/$BOT/verify/123456   # the received code
+   curl -X PUT  localhost:8080/v1/profiles/$BOT -H 'Content-Type: application/json' \
+        -d '{"name": "Community bridge"}'
+   docker compose restart signal-api
+   curl localhost:8080/v1/accounts
+   ```
+
+3. **Add the bot** to each group (it takes one member slot per group), then
+   `SIGNAL_NUMBER=$BOT go run ./cmd/signal2signal -groups` and write
+   `groups.txt` from its output.
+4. **Run the bridge** in the container, next to the API:
+
+   ```sh
+   SIGNAL_NUMBER=$BOT docker compose --profile bridge up -d --build
+   ```
+
+   It reconnects by itself if the API restarts (messages received while
+   disconnected are not replayed). A plain `docker compose up -d` still only
+   starts the API.
+
+Back up the `signal-cli-data` volume: it holds the bot's keys.
 
 ## Caveats
 

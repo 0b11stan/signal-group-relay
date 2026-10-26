@@ -5,7 +5,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -66,7 +65,7 @@ func main() {
 	log.Printf("relaying messages between %d linked groups", len(groups))
 
 	log.Printf("listening for messages to %s (Ctrl+C to stop)", *number)
-	err = client.Receive(ctx, func(in signalapi.Incoming) {
+	receiveForever(ctx, client, func(in signalapi.Incoming) {
 		m, ok := parseMessage(in)
 		if !ok {
 			return
@@ -77,8 +76,35 @@ func main() {
 		m.print()
 		r.handle(ctx, m)
 	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatal(err)
+}
+
+// receiveForever feeds handle with incoming events until ctx is cancelled,
+// reconnecting with an increasing delay whenever the connection drops (API
+// restarting, network hiccup...). Messages received by the API while we are
+// disconnected are not replayed.
+func receiveForever(ctx context.Context, client *signalapi.Client, handle func(signalapi.Incoming)) {
+	const (
+		minDelay = time.Second
+		maxDelay = time.Minute
+	)
+	delay := minDelay
+	for {
+		start := time.Now()
+		err := client.Receive(ctx, handle)
+		if ctx.Err() != nil {
+			return
+		}
+		// A connection that held for a while was healthy: start over.
+		if time.Since(start) > maxDelay {
+			delay = minDelay
+		}
+		log.Printf("receive: %v; reconnecting in %s", err, delay)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, maxDelay)
 	}
 }
 
