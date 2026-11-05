@@ -96,28 +96,28 @@ docker compose up -d
 ```
 
 This runs [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api)
-in `json-rpc` mode on `http://localhost:8081` (bound to localhost only: the
+in `json-rpc` mode on `http://localhost:8080` (bound to localhost only: the
 API has no authentication). Account data is kept in the `signal-cli-data`
 Docker volume.
 
 Check it is up:
 
 ```sh
-curl http://localhost:8081/v1/about
+curl http://localhost:8080/v1/about
 ```
 
 ### 2. Link the API to your Signal account
 
 The API joins your account as a *linked device*, like Signal Desktop.
 
-1. Open <http://localhost:8081/v1/qrcodelink?device_name=signal-group-relay> in a
+1. Open <http://localhost:8080/v1/qrcodelink?device_name=signal-group-relay> in a
    browser. It shows a QR code.
 2. On your phone: Signal → Settings → Linked devices → Link new device, and
    scan the code.
 3. Check the account is known to the API:
 
    ```sh
-   curl http://localhost:8081/v1/accounts
+   curl http://localhost:8080/v1/accounts
    ```
 
 4. Restart the API so the daemon picks up the new account:

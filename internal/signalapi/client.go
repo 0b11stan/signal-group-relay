@@ -24,7 +24,7 @@ type Client struct {
 	http    *http.Client
 }
 
-// New returns a client for the API at baseURL (e.g. http://localhost:8081)
+// New returns a client for the API at baseURL (e.g. http://localhost:8080)
 // acting as the account registered or linked under number (e.g. +33600000000).
 func New(baseURL, number string) (*Client, error) {
 	u, err := url.Parse(baseURL)

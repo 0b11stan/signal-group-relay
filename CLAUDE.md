@@ -17,7 +17,7 @@ later features without asking.
 
 - Language: Go (module `github.com/0b11stan/signal-group-relay`).
 - Signal backend: signal-cli-rest-api in `json-rpc` mode (`docker-compose.yml`),
-  exposed on `http://localhost:8081` because port 8080 is taken on the dev
+  exposed on `http://localhost:8080` because port 8080 is taken on the dev
   machine. Incoming messages are streamed over the
   `/v1/receive/{number}` websocket.
 - Layout: `cmd/signal-group-relay` (entry point), `internal/signalapi` (API client

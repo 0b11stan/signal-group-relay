@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	apiURL := flag.String("api", "http://localhost:8081", "signal-cli-rest-api base URL")
+	apiURL := flag.String("api", "http://localhost:8080", "signal-cli-rest-api base URL")
 	number := flag.String("number", os.Getenv("SIGNAL_NUMBER"), "account phone number, e.g. +33600000000 (or $SIGNAL_NUMBER)")
 	listGroups := flag.Bool("groups", false, "list the account's groups and exit")
 	linkedFile := flag.String("linked-groups", "", "file with one group id per line (as printed by -groups); messages posted in one of these groups are relayed to all the others")
