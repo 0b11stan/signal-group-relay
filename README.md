@@ -175,7 +175,8 @@ as sent by you:
   `[Community A] hello`. The author's name and phone number are never relayed;
 - messages you write yourself are sent as they are.
 
-Images are relayed with their caption. Not relayed yet: other attachments (files, voice notes, videos), replies, mentions, reactions and edits.
+Images (JPEG, PNG, GIF and WebP, checked from the file content rather than
+the type announced by the sender) are relayed with their caption. Not relayed yet: other attachments (files, voice notes, videos), replies, mentions, reactions and edits.
 
 Use `-api` if the API is not on `http://localhost:8080`.
 

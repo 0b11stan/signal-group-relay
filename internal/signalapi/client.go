@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -135,8 +136,26 @@ func (c *Client) Receive(ctx context.Context, handle func(Envelope)) error {
 
 // File is an attachment to send.
 type File struct {
+	// ContentType is a bare MIME type such as image/png, without parameters.
 	ContentType string
 	Data        []byte
+}
+
+// validContentType reports whether ct is a bare MIME type (type/subtype made
+// of lowercase letters, digits and .+-). Anything else could add parameters
+// to the data: URI the API parses, which it trusts (e.g. the filename it
+// writes the attachment to).
+func validContentType(ct string) bool {
+	typ, sub, ok := strings.Cut(ct, "/")
+	if !ok || typ == "" || sub == "" {
+		return false
+	}
+	for _, c := range typ + sub {
+		if !('a' <= c && c <= 'z' || '0' <= c && c <= '9' || strings.ContainsRune(".+-", c)) {
+			return false
+		}
+	}
+	return true
 }
 
 // Attachment downloads a received attachment by its id.
@@ -160,6 +179,9 @@ func (c *Client) Send(ctx context.Context, groupID, text string, files ...File) 
 	if len(files) > 0 {
 		attachments := make([]string, len(files))
 		for i, f := range files {
+			if !validContentType(f.ContentType) {
+				return 0, fmt.Errorf("send: invalid attachment content type")
+			}
 			attachments[i] = "data:" + f.ContentType + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
 		}
 		payload["base64_attachments"] = attachments

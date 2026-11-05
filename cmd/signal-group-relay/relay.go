@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -66,8 +67,21 @@ func (r *relayer) handle(ctx context.Context, m message) {
 	}
 }
 
+// relayedImageTypes are the image formats relayed, as detected by
+// http.DetectContentType.
+var relayedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/webp": true,
+}
+
 // images downloads the image attachments of m. Other kinds of attachment are
 // not relayed yet. Images that fail to download are left out.
+//
+// The content type declared by the sender is attacker-controlled: it is only
+// used to skip non-images before downloading. The type sent on is detected
+// from the downloaded bytes and must be one of relayedImageTypes.
 func (r *relayer) images(ctx context.Context, m message) []signalapi.File {
 	var files []signalapi.File
 	for _, a := range m.Attachments {
@@ -79,7 +93,11 @@ func (r *relayer) images(ctx context.Context, m message) []signalapi.File {
 			log.Printf("relay: %v", err)
 			continue
 		}
-		files = append(files, signalapi.File{ContentType: a.ContentType, Data: data})
+		contentType := http.DetectContentType(data)
+		if !relayedImageTypes[contentType] {
+			continue
+		}
+		files = append(files, signalapi.File{ContentType: contentType, Data: data})
 	}
 	return files
 }
