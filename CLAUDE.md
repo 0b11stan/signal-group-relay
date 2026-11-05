@@ -37,9 +37,12 @@ later features without asking.
 
 - **Loop prevention is critical:** the bot must never relay its own messages,
   or the groups will flood each other.
-- **Privacy:** the bot can read every message. Don't log message contents,
-  phone numbers or other personal data unless needed, and keep the Signal
-  account data out of the repository.
+- **Privacy / no-log:** the bot can read every message, and the server
+  policy is "no-log". Never log or print message contents, authors, phone
+  numbers, group names or ids, or per-message activity; errors that may be
+  logged must not carry them either (watch for URLs holding the account
+  number and API error bodies). Keep the Signal account data out of the
+  repository.
 - **Secrets:** never commit phone numbers, group IDs, account keys or real
   config files. Commit example configs only (e.g. `config.example.yaml`).
 - **Rate limits:** Signal may throttle busy accounts. Keep sending

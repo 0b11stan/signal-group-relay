@@ -11,8 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -34,6 +34,42 @@ func New(baseURL, number string) (*Client, error) {
 	return &Client{baseURL: u, number: number, http: http.DefaultClient}, nil
 }
 
+// do sends a request to the API endpoint made of path, with payload encoded
+// as the JSON body if it is not nil. Non-2xx responses are turned into an
+// error; otherwise the caller must close the response body.
+//
+// Errors are meant to be logged, so they never carry the URL (it can hold the
+// account number) or the API's error body (it can quote numbers or contents).
+func (c *Client) do(ctx context.Context, method string, payload any, path ...string) (*http.Response, error) {
+	var body io.Reader
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL.JoinPath(path...).String(), body)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		if ue, ok := err.(*url.Error); ok {
+			err = ue.Err
+		}
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("unexpected status %s", resp.Status)
+	}
+	return resp, nil
+}
+
 // Group is a Signal group the account is a member of.
 type Group struct {
 	// ID is the API's identifier, used when sending to the group.
@@ -46,19 +82,11 @@ type Group struct {
 
 // Groups lists the groups the account is a member of.
 func (c *Client) Groups(ctx context.Context) ([]Group, error) {
-	u := c.baseURL.JoinPath("v1", "groups", c.number)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http.Do(req)
+	resp, err := c.do(ctx, http.MethodGet, nil, "v1", "groups", c.number)
 	if err != nil {
 		return nil, fmt.Errorf("list groups: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("list groups: unexpected status %s", resp.Status)
-	}
 	var groups []Group
 	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
 		return nil, fmt.Errorf("decode groups: %w", err)
@@ -68,7 +96,7 @@ func (c *Client) Groups(ctx context.Context) ([]Group, error) {
 
 // Receive connects to the receive websocket and calls handle for every
 // incoming event until ctx is cancelled or the connection fails.
-func (c *Client) Receive(ctx context.Context, handle func(Incoming)) error {
+func (c *Client) Receive(ctx context.Context, handle func(Envelope)) error {
 	u := *c.baseURL.JoinPath("v1", "receive", c.number)
 	switch u.Scheme {
 	case "https":
@@ -79,15 +107,12 @@ func (c *Client) Receive(ctx context.Context, handle func(Incoming)) error {
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
 	if err != nil {
-		return fmt.Errorf("connect to %s: %w", u.String(), err)
+		// Not wrapped with the URL: it holds the account number.
+		return fmt.Errorf("connect: %w", err)
 	}
 	defer conn.Close()
-
 	// Unblock ReadMessage when the context is cancelled.
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
+	defer context.AfterFunc(ctx, func() { conn.Close() })()
 
 	for {
 		_, data, err := conn.ReadMessage()
@@ -97,11 +122,14 @@ func (c *Client) Receive(ctx context.Context, handle func(Incoming)) error {
 			}
 			return fmt.Errorf("read: %w", err)
 		}
-		var in Incoming
-		if err := json.Unmarshal(data, &in); err != nil {
-			return fmt.Errorf("decode event %q: %w", strings.TrimSpace(string(data)), err)
+		var in struct {
+			Envelope Envelope `json:"envelope"`
 		}
-		handle(in)
+		if err := json.Unmarshal(data, &in); err != nil {
+			// The event is not quoted: it holds message contents and numbers.
+			return fmt.Errorf("decode event: %w", err)
+		}
+		handle(in.Envelope)
 	}
 }
 
@@ -113,19 +141,11 @@ type File struct {
 
 // Attachment downloads a received attachment by its id.
 func (c *Client) Attachment(ctx context.Context, id string) ([]byte, error) {
-	u := c.baseURL.JoinPath("v1", "attachments", id)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http.Do(req)
+	resp, err := c.do(ctx, http.MethodGet, nil, "v1", "attachments", id)
 	if err != nil {
 		return nil, fmt.Errorf("download attachment: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download attachment: unexpected status %s", resp.Status)
-	}
 	return io.ReadAll(resp.Body)
 }
 
@@ -144,25 +164,11 @@ func (c *Client) Send(ctx context.Context, groupID, text string, files ...File) 
 		}
 		payload["base64_attachments"] = attachments
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return 0, err
-	}
-	u := c.baseURL.JoinPath("v2", "send")
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	resp, err := c.do(ctx, http.MethodPost, payload, "v2", "send")
 	if err != nil {
 		return 0, fmt.Errorf("send: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return 0, fmt.Errorf("send: unexpected status %s: %s", resp.Status, strings.TrimSpace(string(msg)))
-	}
 	return parseSendTimestamp(resp.Body)
 }
 
@@ -175,22 +181,21 @@ func parseSendTimestamp(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read send response: %w", err)
 	}
-	var entries []struct {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return 0, nil
+	}
+	if data[0] != '[' {
+		data = slices.Concat([]byte("["), data, []byte("]"))
+	}
+	var results []struct {
 		Timestamp json.Number `json:"timestamp"`
 	}
-	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '[' {
-		err = json.Unmarshal(trimmed, &entries)
-	} else {
-		entries = make([]struct {
-			Timestamp json.Number `json:"timestamp"`
-		}, 1)
-		err = json.Unmarshal(trimmed, &entries[0])
+	if err := json.Unmarshal(data, &results); err != nil {
+		return 0, fmt.Errorf("decode send response: %w", err)
 	}
-	if err != nil {
-		return 0, fmt.Errorf("decode send response %q: %w", data, err)
-	}
-	for _, e := range entries {
-		if ts, err := strconv.ParseInt(e.Timestamp.String(), 10, 64); err == nil {
+	for _, res := range results {
+		if ts, err := strconv.ParseInt(res.Timestamp.String(), 10, 64); err == nil {
 			return ts, nil
 		}
 	}

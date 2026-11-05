@@ -28,52 +28,50 @@ const sentTTL = time.Hour
 
 // linked reports whether m was posted in one of the linked groups.
 func (r *relayer) linked(m message) bool {
-	if m.group == nil {
+	if m.GroupInfo == nil {
 		return false
 	}
-	_, ok := r.groups[m.group.GroupID]
+	_, ok := r.groups[m.GroupInfo.GroupID]
 	return ok
 }
 
 // handle relays m to the other linked groups. m must be linked.
 func (r *relayer) handle(ctx context.Context, m message) {
-	if _, ours := r.sent[m.timestamp]; ours {
+	if _, ours := r.sent[m.Timestamp]; ours {
 		return
 	}
 	files := r.images(ctx, m)
-	if m.text == "" && len(files) == 0 {
-		log.Printf("relay: skipping message without text or image")
+	if m.Message == "" && len(files) == 0 {
 		return
 	}
 
-	text := m.text
+	origin := m.GroupInfo.GroupID
+	text := m.Message
 	if !m.fromMe {
-		text = strings.TrimSpace(fmt.Sprintf("[%s] %s", r.groups[m.group.GroupID].Name, m.text))
+		text = strings.TrimSpace(fmt.Sprintf("[%s] %s", r.groups[origin].Name, m.Message))
 	}
 
 	for id, g := range r.groups {
-		if id == m.group.GroupID {
+		if id == origin {
 			continue
 		}
 		ts, err := r.client.Send(ctx, g.ID, text, files...)
 		if err != nil {
-			log.Printf("relay: send to %q failed: %v", g.Name, err)
+			log.Printf("relay: %v", err)
 			continue
 		}
 		if ts != 0 {
 			r.remember(ts)
 		}
-		log.Printf("relay: sent to %q", g.Name)
 	}
 }
 
 // images downloads the image attachments of m. Other kinds of attachment are
-// not relayed yet. Images that fail to download are logged and left out.
+// not relayed yet. Images that fail to download are left out.
 func (r *relayer) images(ctx context.Context, m message) []signalapi.File {
 	var files []signalapi.File
-	for _, a := range m.attachments {
+	for _, a := range m.Attachments {
 		if !strings.HasPrefix(a.ContentType, "image/") {
-			log.Printf("relay: %s attachment not relayed (only images are supported)", a.ContentType)
 			continue
 		}
 		data, err := r.client.Attachment(ctx, a.ID)

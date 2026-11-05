@@ -80,8 +80,8 @@ bridges:
 
 ## Getting started
 
-At this stage the program only connects to Signal and prints the messages it
-receives.
+At this stage the program relays text messages and images between the
+linked groups.
 
 ### Requirements
 
@@ -98,7 +98,10 @@ docker compose up -d
 This runs [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api)
 in `json-rpc` mode on `http://localhost:8080` (bound to localhost only: the
 API has no authentication). Account data is kept in the `signal-cli-data`
-Docker volume.
+Docker volume. Its logs are discarded (`logging: driver: none`): signal-cli
+prints every message it receives, with names and phone numbers. To debug the
+API, comment that out temporarily, and recreate the container afterwards so
+the logs are deleted.
 
 Check it is up:
 
@@ -142,7 +145,7 @@ go run ./cmd/signal-group-relay -groups
 
 Put the ids of the groups to link (the `id=` value printed by `-groups`) in a
 file, one per line, at least two. Blank lines and lines starting with `#` are
-ignored:
+ignored. The program refuses to start with fewer than two:
 
 ```
 # groups.txt
@@ -155,15 +158,15 @@ go run ./cmd/signal-group-relay -linked-groups groups.txt
 ```
 
 The program refuses to start if an id isn't one of your account's groups. Then
-every text message posted in a linked group is posted to all the other linked
-groups, and also printed in the terminal (Ctrl+C to stop):
+every message posted in a linked group is posted to all the other linked
+groups (Ctrl+C to stop). The program does nothing without `-linked-groups`
+(or `-groups`): it prints its usage.
 
-```
-[2026-10-26 12:30:00] group "Community A" id=abc...= | Alice: hello!
-```
-
-Messages you type on your phone are tagged `(me)`. The program does nothing
-without `-linked-groups` (or `-groups`): it prints its usage.
+The bridge follows a **no-log** policy: it never logs message contents,
+authors, phone numbers, group names or ids, nor any per-message activity.
+Logs only contain startup information and errors (e.g. `relay: send:
+unexpected status 400 Bad Request`), with the API's error details left out
+since they can quote phone numbers.
 
 Since the bridge is a linked device of your account, the relayed copies appear
 as sent by you:
@@ -226,8 +229,8 @@ Back up the `signal-cli-data` volume: it holds the bot's keys.
 
 ## Status
 
-🚧 Early development: the bridge can connect to Signal and print incoming
-messages, but doesn't relay them yet.
+🚧 Early development: text messages and images are relayed between the
+linked groups. See *Planned features* for what is still missing.
 
 ## License
 

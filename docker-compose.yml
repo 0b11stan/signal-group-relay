@@ -12,6 +12,10 @@ services:
     volumes:
       # Signal account keys and data.
       - signal-cli-data:/home/.local/share/signal-cli
+    # No-log policy: signal-cli prints every envelope it receives (contact
+    # names, phone numbers, message contents) to stdout. Discard it.
+    logging:
+      driver: none
 
   # The bridge itself. Not started by a plain `docker compose up`: it needs
   # SIGNAL_NUMBER and a groups.txt, then run

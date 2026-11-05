@@ -1,5 +1,5 @@
-// Command signal-group-relay connects to signal-cli-rest-api and prints the
-// messages received by the account. It is the first step towards the bridge.
+// Command signal-group-relay relays the messages posted in one of several
+// linked Signal groups to all the others, through signal-cli-rest-api.
 package main
 
 import (
@@ -54,27 +54,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(ids) < 2 {
-		log.Fatal("-linked-groups needs at least two group ids")
-	}
 	groups, err := resolveGroups(ctx, client, ids)
 	if err != nil {
 		log.Fatal(err)
 	}
 	r := &relayer{client: client, groups: groups, sent: make(map[int64]time.Time)}
-	log.Printf("relaying messages between %d linked groups", len(groups))
-
-	log.Printf("listening for messages to %s (Ctrl+C to stop)", *number)
-	receiveForever(ctx, client, func(in signalapi.Incoming) {
-		m, ok := parseMessage(in)
-		if !ok {
-			return
+	log.Printf("relaying messages between %d linked groups (Ctrl+C to stop)", len(groups))
+	receiveForever(ctx, client, func(env signalapi.Envelope) {
+		m, ok := parseMessage(env)
+		if ok && r.linked(m) {
+			r.handle(ctx, m)
 		}
-		if !r.linked(m) {
-			return
-		}
-		m.print()
-		r.handle(ctx, m)
 	})
 }
 
@@ -82,7 +72,7 @@ func main() {
 // reconnecting with an increasing delay whenever the connection drops (API
 // restarting, network hiccup...). Messages received by the API while we are
 // disconnected are not replayed.
-func receiveForever(ctx context.Context, client *signalapi.Client, handle func(signalapi.Incoming)) {
+func receiveForever(ctx context.Context, client *signalapi.Client, handle func(signalapi.Envelope)) {
 	const (
 		minDelay = time.Second
 		maxDelay = time.Minute
@@ -129,8 +119,8 @@ func loadGroupIDs(path string) (map[string]struct{}, error) {
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("%s contains no group id", path)
+	if len(ids) < 2 {
+		return nil, fmt.Errorf("%s must contain at least two group ids", path)
 	}
 	return ids, nil
 }
@@ -149,62 +139,32 @@ func resolveGroups(ctx context.Context, client *signalapi.Client, ids map[string
 	}
 	found := make(map[string]signalapi.Group, len(ids))
 	for id := range ids {
-		g, ok := known[id]
-		if !ok {
-			return nil, fmt.Errorf("group id %q is not one of the account's groups (see -groups)", id)
+		if g, ok := known[id]; ok {
+			found[id] = g
 		}
-		found[id] = g
+	}
+	if unknown := len(ids) - len(found); unknown > 0 {
+		return nil, fmt.Errorf("%d linked group id(s) are not among the account's groups (see -groups)", unknown)
 	}
 	return found, nil
 }
 
-// message is a text message received by the account, either from someone
-// else or typed on one of our own other devices.
+// message is a message received by the account, either from someone else or
+// typed on one of our own other devices.
 type message struct {
-	sender      string
-	text        string
-	timestamp   int64
-	group       *signalapi.GroupInfo // nil for direct messages
-	attachments []signalapi.Attachment
-	fromMe      bool
+	signalapi.DataMessage
+	fromMe bool
 }
 
 // parseMessage extracts a message from an incoming event. It returns false
 // for receipts, typing indicators, reactions, deletions and the like.
-func parseMessage(in signalapi.Incoming) (message, bool) {
-	env := in.Envelope
-	m := message{sender: env.SourceName}
-	if m.sender == "" {
-		m.sender = env.Source
+func parseMessage(env signalapi.Envelope) (message, bool) {
+	d, fromMe := env.DataMessage, false
+	if d == nil && env.SyncMessage != nil {
+		d, fromMe = env.SyncMessage.SentMessage, true
 	}
-
-	switch {
-	case env.DataMessage != nil:
-		d := env.DataMessage
-		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, d.Attachments
-	case env.SyncMessage != nil && env.SyncMessage.SentMessage != nil:
-		d := env.SyncMessage.SentMessage
-		m.text, m.timestamp, m.group, m.attachments = d.Message, d.Timestamp, d.GroupInfo, d.Attachments
-		m.fromMe = true
-		m.sender += " (me)"
-	default:
+	if d == nil || (d.Message == "" && len(d.Attachments) == 0) {
 		return message{}, false
 	}
-	if m.text == "" && len(m.attachments) == 0 {
-		return message{}, false
-	}
-	return m, true
-}
-
-func (m message) print() {
-	where := "direct"
-	if m.group != nil {
-		where = fmt.Sprintf("group %q id=%s", m.group.GroupName, m.group.GroupID)
-	}
-	when := time.UnixMilli(m.timestamp).Format(time.DateTime)
-	fmt.Printf("[%s] %s | %s: %s", when, where, m.sender, m.text)
-	if len(m.attachments) > 0 {
-		fmt.Printf(" [+%d attachment(s)]", len(m.attachments))
-	}
-	fmt.Println()
+	return message{DataMessage: *d, fromMe: fromMe}, true
 }
